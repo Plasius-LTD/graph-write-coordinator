@@ -63,6 +63,7 @@ const coordinator = new WriteCoordinator({
 });
 
 const operation = await coordinator.submit(command);
+const status = await coordinator.getOperationStatus(operation.operationId);
 
 const batcher = new HotKeyBatcher({
   windowMs: 50,
@@ -72,7 +73,7 @@ const batcher = new HotKeyBatcher({
   },
 });
 
-console.log(operation.state);
+console.log(operation.state, status.recommendedHttpStatus);
 ```
 
 ---
@@ -87,6 +88,27 @@ npm run typecheck
 npm run test:coverage
 npm run build
 ```
+
+---
+
+## Operation Status Contract
+
+- `submit` returns an operation with deterministic state progression.
+- `getOperationStatus(operationId)` returns:
+  - `found` + `operation`,
+  - `terminal` flag,
+  - `recommendedHttpStatus` mapping for adapter/HTTP layers.
+- Suggested host mapping:
+  - `202` for `accepted`/`queued`/`processing`,
+  - `200` for `succeeded`,
+  - `409` for `failed`/`cancelled`,
+  - `404` when operation is unknown.
+
+## Hot-Key Batching
+
+- `HotKeyBatcher` supports localized write collapse by partition key.
+- Target window for high-contention workloads is 50-200ms (`windowMs`).
+- High-contention tests validate single-window merges under parallel submissions.
 
 ---
 

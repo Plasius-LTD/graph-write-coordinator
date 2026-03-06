@@ -216,6 +216,41 @@ describe("WriteCoordinator", () => {
     expect(operation.operationId.startsWith("op_")).toBe(true);
     expect(operation.state).toBe("queued");
   });
+
+  it("exposes deterministic operation status query contract", async () => {
+    const coordinator = new WriteCoordinator({
+      queue: new InMemoryQueue(),
+      operationStore: new InMemoryOperationStore(),
+      idGenerator: { next: () => "op_status" },
+      now: () => 900,
+    });
+
+    const queued = await coordinator.submit({
+      idempotencyKey: "idk_status",
+      partitionKey: "pk_status",
+      aggregateKey: "agg_status",
+      payload: { value: 9 },
+      submittedAtEpochMs: 900,
+    }, { forceQueue: true });
+
+    const queuedStatus = await coordinator.getOperationStatus(queued.operationId);
+    expect(queuedStatus).toEqual({
+      found: true,
+      operationId: "op_status",
+      operation: expect.objectContaining({ state: "queued" }),
+      terminal: false,
+      recommendedHttpStatus: 202,
+    });
+
+    const missingStatus = await coordinator.getOperationStatus("missing");
+    expect(missingStatus).toEqual({
+      found: false,
+      operationId: "missing",
+      operation: null,
+      terminal: true,
+      recommendedHttpStatus: 404,
+    });
+  });
 });
 
 describe("HotKeyBatcher", () => {
@@ -358,5 +393,49 @@ describe("HotKeyBatcher", () => {
 
     expect(flushed).toHaveLength(1);
     expect(flushed[0]?.partitionKey).toBe("pk_c");
+  });
+
+  it("handles high-contention hot-key writes in a single batch window", async () => {
+    let now = 0;
+    const flushed: Array<{ partitionKey: string; command: WriteCommand }> = [];
+
+    const batcher = new HotKeyBatcher({
+      windowMs: 100,
+      now: () => now,
+      merge(commands) {
+        const latest = commands[commands.length - 1]!;
+        return {
+          idempotencyKey: latest.idempotencyKey,
+          partitionKey: latest.partitionKey,
+          aggregateKey: latest.aggregateKey,
+          submittedAtEpochMs: latest.submittedAtEpochMs,
+          payload: {
+            mergedCount: commands.length,
+          },
+        };
+      },
+      async onFlush(partitionKey, command) {
+        flushed.push({ partitionKey, command });
+      },
+    });
+
+    await Promise.all(
+      Array.from({ length: 100 }, (_, index) =>
+        batcher.add({
+          idempotencyKey: `idk_${index}`,
+          partitionKey: "pk_hot",
+          aggregateKey: "agg_hot",
+          payload: { value: index },
+          submittedAtEpochMs: index,
+        }),
+      ),
+    );
+
+    now = 150;
+    await batcher.flushExpired();
+
+    expect(flushed).toHaveLength(1);
+    expect(flushed[0]?.partitionKey).toBe("pk_hot");
+    expect(flushed[0]?.command.payload).toEqual({ mergedCount: 100 });
   });
 });

@@ -4,6 +4,7 @@ import type {
   Version,
   WriteCommand,
   WriteOperation,
+  WriteOperationState,
   WriteQueue,
 } from "@plasius/graph-contracts";
 
@@ -27,6 +28,23 @@ export interface WriteCoordinatorOptions {
 export interface SubmitWriteOptions {
   forceQueue?: boolean;
 }
+
+export interface OperationStatusResponse {
+  found: boolean;
+  operationId: string;
+  operation: WriteOperation | null;
+  terminal: boolean;
+  recommendedHttpStatus: 200 | 202 | 404 | 409;
+}
+
+const TRANSITION_RULES: Record<WriteOperationState, WriteOperationState[]> = {
+  accepted: ["processing", "queued", "cancelled"],
+  queued: ["processing", "cancelled", "failed"],
+  processing: ["queued", "succeeded", "failed", "cancelled"],
+  succeeded: [],
+  failed: [],
+  cancelled: [],
+};
 
 export class WriteCoordinator {
   private readonly queue: WriteQueue;
@@ -59,26 +77,25 @@ export class WriteCoordinator {
     await this.operationStore.put(accepted);
 
     if (!options.forceQueue && this.commitHandler) {
+      const processing = this.transitionOperation(accepted, "processing");
+      await this.operationStore.update(processing);
       try {
         const commitResult = await this.withTimeout(this.commitHandler.commit(command), this.syncTimeoutMs);
-        const completed: WriteOperation = {
-          ...accepted,
-          state: "succeeded",
-          updatedAtEpochMs: this.now(),
+        const completed = this.transitionOperation(processing, "succeeded", {
           resultVersion: commitResult.version,
-        };
+        });
         await this.operationStore.update(completed);
         return completed;
       } catch {
         // fall through to queue mode
+        const queuedFromFallback = this.transitionOperation(processing, "queued");
+        await this.operationStore.update(queuedFromFallback);
+        await this.queue.enqueue(command);
+        return queuedFromFallback;
       }
     }
 
-    const queued: WriteOperation = {
-      ...accepted,
-      state: "queued",
-      updatedAtEpochMs: this.now(),
-    };
+    const queued = this.transitionOperation(accepted, "queued");
     await this.operationStore.update(queued);
     await this.queue.enqueue(command);
     return queued;
@@ -107,22 +124,16 @@ export class WriteCoordinator {
 
       try {
         const result = await this.commitHandler.commit(command);
-        const succeeded: WriteOperation = {
-          ...processing,
-          state: "succeeded",
-          updatedAtEpochMs: this.now(),
+        const succeeded = this.transitionOperation(processing, "succeeded", {
           resultVersion: result.version,
-        };
+        });
         await this.operationStore.update(succeeded);
         await this.queue.ack(operationId);
         operations.push(succeeded);
       } catch (error) {
-        const failed: WriteOperation = {
-          ...processing,
-          state: "failed",
-          updatedAtEpochMs: this.now(),
+        const failed = this.transitionOperation(processing, "failed", {
           error: error instanceof Error ? error.message : "Unknown commit failure",
-        };
+        });
         await this.operationStore.update(failed);
         await this.queue.nack(operationId, failed.error ?? "Unknown failure");
         operations.push(failed);
@@ -130,6 +141,28 @@ export class WriteCoordinator {
     }
 
     return operations;
+  }
+
+  public async getOperationStatus(operationId: string): Promise<OperationStatusResponse> {
+    const operation = await this.operationStore.get(operationId);
+    if (!operation) {
+      return {
+        found: false,
+        operationId,
+        operation: null,
+        terminal: true,
+        recommendedHttpStatus: 404,
+      };
+    }
+
+    const terminal = operation.state === "succeeded" || operation.state === "failed" || operation.state === "cancelled";
+    return {
+      found: true,
+      operationId,
+      operation,
+      terminal,
+      recommendedHttpStatus: this.statusCodeForState(operation.state),
+    };
   }
 
   private async withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
@@ -146,6 +179,36 @@ export class WriteCoordinator {
         clearTimeout(timer);
       }
     }
+  }
+
+  private transitionOperation(
+    operation: WriteOperation,
+    nextState: WriteOperationState,
+    patch: Partial<Omit<WriteOperation, "operationId" | "partitionKey" | "aggregateKey" | "acceptedAtEpochMs">> = {},
+  ): WriteOperation {
+    const allowedTransitions = TRANSITION_RULES[operation.state];
+    if (!allowedTransitions.includes(nextState)) {
+      throw new Error(`Invalid state transition from ${operation.state} to ${nextState}`);
+    }
+
+    return {
+      ...operation,
+      ...patch,
+      state: nextState,
+      updatedAtEpochMs: this.now(),
+    };
+  }
+
+  private statusCodeForState(state: WriteOperationState): 200 | 202 | 409 {
+    if (state === "accepted" || state === "queued" || state === "processing") {
+      return 202;
+    }
+
+    if (state === "failed" || state === "cancelled") {
+      return 409;
+    }
+
+    return 200;
   }
 }
 
