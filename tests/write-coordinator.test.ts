@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { OperationStore, WriteCommand, WriteOperation, WriteQueue } from "@plasius/graph-contracts";
 import { HotKeyBatcher, WriteCoordinator } from "../src/write-coordinator.js";
@@ -250,6 +250,75 @@ describe("WriteCoordinator", () => {
       terminal: true,
       recommendedHttpStatus: 404,
     });
+  });
+
+  it("emits telemetry for submit, processing, and status lookups", async () => {
+    let id = 0;
+    const telemetry = {
+      metric: vi.fn(),
+      error: vi.fn(),
+      trace: vi.fn(),
+    };
+    const queue = new InMemoryQueue();
+    const coordinator = new WriteCoordinator({
+      queue,
+      operationStore: new InMemoryOperationStore(),
+      commitHandler: {
+        async commit(command) {
+          if (command.idempotencyKey === "sync_fail" || command.idempotencyKey === "queue_fail") {
+            throw new Error("commit failure");
+          }
+          return { version: 1 };
+        },
+      },
+      idGenerator: { next: () => `op_${++id}` },
+      now: () => 1_000,
+      telemetry,
+    });
+
+    await coordinator.submit({
+      idempotencyKey: "sync_ok",
+      partitionKey: "pk_t",
+      aggregateKey: "agg_t",
+      payload: { value: 1 },
+      submittedAtEpochMs: 1_000,
+    });
+
+    await coordinator.submit({
+      idempotencyKey: "sync_fail",
+      partitionKey: "pk_t",
+      aggregateKey: "agg_t",
+      payload: { value: 2 },
+      submittedAtEpochMs: 1_000,
+    });
+
+    queue.queued.push({
+      idempotencyKey: "queue_fail",
+      partitionKey: "pk_t",
+      aggregateKey: "agg_t",
+      payload: { value: 3 },
+      submittedAtEpochMs: 1_000,
+    });
+    await coordinator.processPartition("pk_t", 10);
+
+    await coordinator.getOperationStatus("op_1");
+    await coordinator.getOperationStatus("missing");
+
+    expect(telemetry.metric).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "graph.write.submit.latency" }),
+    );
+    expect(telemetry.metric).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "graph.write.submit.degraded" }),
+    );
+    expect(telemetry.metric).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "graph.write.process.result" }),
+    );
+    expect(telemetry.metric).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "graph.write.status.lookup" }),
+    );
+    expect(telemetry.error).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "WRITE_PROCESS_FAILED" }),
+    );
   });
 });
 

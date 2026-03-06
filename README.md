@@ -55,6 +55,7 @@ import { WriteCoordinator, HotKeyBatcher } from "@plasius/graph-write-coordinato
 const coordinator = new WriteCoordinator({
   queue,
   operationStore,
+  telemetry,
   commitHandler: {
     async commit(command) {
       return { version: Date.now() };
@@ -109,6 +110,15 @@ npm run build
 - `HotKeyBatcher` supports localized write collapse by partition key.
 - Target window for high-contention workloads is 50-200ms (`windowMs`).
 - High-contention tests validate single-window merges under parallel submissions.
+
+## Telemetry
+
+`WriteCoordinatorOptions` accepts optional `telemetry` (`TelemetrySink`) and emits:
+
+- `graph.write.submit.latency`
+- `graph.write.submit.degraded`
+- `graph.write.process.result`
+- `graph.write.status.lookup`
 
 ---
 

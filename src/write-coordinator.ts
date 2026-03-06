@@ -1,6 +1,7 @@
 import type {
   IdGenerator,
   OperationStore,
+  TelemetrySink,
   Version,
   WriteCommand,
   WriteOperation,
@@ -23,6 +24,7 @@ export interface WriteCoordinatorOptions {
   now?: () => number;
   idGenerator?: IdGenerator;
   syncTimeoutMs?: number;
+  telemetry?: TelemetrySink;
 }
 
 export interface SubmitWriteOptions {
@@ -53,6 +55,7 @@ export class WriteCoordinator {
   private readonly now: () => number;
   private readonly idGenerator: IdGenerator;
   private readonly syncTimeoutMs: number;
+  private readonly telemetry?: TelemetrySink;
 
   public constructor(options: WriteCoordinatorOptions) {
     this.queue = options.queue;
@@ -61,9 +64,11 @@ export class WriteCoordinator {
     this.now = options.now ?? (() => Date.now());
     this.idGenerator = options.idGenerator ?? { next: () => `op_${Math.random().toString(36).slice(2)}` };
     this.syncTimeoutMs = options.syncTimeoutMs ?? 500;
+    this.telemetry = options.telemetry;
   }
 
   public async submit(command: WriteCommand, options: SubmitWriteOptions = {}): Promise<WriteOperation> {
+    const startedAt = this.now();
     const now = this.now();
     const accepted: WriteOperation = {
       operationId: this.idGenerator.next(),
@@ -85,12 +90,19 @@ export class WriteCoordinator {
           resultVersion: commitResult.version,
         });
         await this.operationStore.update(completed);
+        this.recordSubmitMetric(completed.state, startedAt);
         return completed;
       } catch {
         // fall through to queue mode
         const queuedFromFallback = this.transitionOperation(processing, "queued");
         await this.operationStore.update(queuedFromFallback);
         await this.queue.enqueue(command);
+        this.telemetry?.metric({
+          name: "graph.write.submit.degraded",
+          value: 1,
+          unit: "count",
+        });
+        this.recordSubmitMetric(queuedFromFallback.state, startedAt);
         return queuedFromFallback;
       }
     }
@@ -98,6 +110,7 @@ export class WriteCoordinator {
     const queued = this.transitionOperation(accepted, "queued");
     await this.operationStore.update(queued);
     await this.queue.enqueue(command);
+    this.recordSubmitMetric(queued.state, startedAt);
     return queued;
   }
 
@@ -129,6 +142,12 @@ export class WriteCoordinator {
         });
         await this.operationStore.update(succeeded);
         await this.queue.ack(operationId);
+        this.telemetry?.metric({
+          name: "graph.write.process.result",
+          value: 1,
+          unit: "count",
+          tags: { state: succeeded.state },
+        });
         operations.push(succeeded);
       } catch (error) {
         const failed = this.transitionOperation(processing, "failed", {
@@ -136,6 +155,17 @@ export class WriteCoordinator {
         });
         await this.operationStore.update(failed);
         await this.queue.nack(operationId, failed.error ?? "Unknown failure");
+        this.telemetry?.metric({
+          name: "graph.write.process.result",
+          value: 1,
+          unit: "count",
+          tags: { state: failed.state },
+        });
+        this.telemetry?.error({
+          message: failed.error ?? "Unknown failure",
+          source: "graph-write-coordinator",
+          code: "WRITE_PROCESS_FAILED",
+        });
         operations.push(failed);
       }
     }
@@ -146,6 +176,12 @@ export class WriteCoordinator {
   public async getOperationStatus(operationId: string): Promise<OperationStatusResponse> {
     const operation = await this.operationStore.get(operationId);
     if (!operation) {
+      this.telemetry?.metric({
+        name: "graph.write.status.lookup",
+        value: 1,
+        unit: "count",
+        tags: { found: "false" },
+      });
       return {
         found: false,
         operationId,
@@ -156,6 +192,15 @@ export class WriteCoordinator {
     }
 
     const terminal = operation.state === "succeeded" || operation.state === "failed" || operation.state === "cancelled";
+    this.telemetry?.metric({
+      name: "graph.write.status.lookup",
+      value: 1,
+      unit: "count",
+      tags: {
+        found: "true",
+        state: operation.state,
+      },
+    });
     return {
       found: true,
       operationId,
@@ -209,6 +254,15 @@ export class WriteCoordinator {
     }
 
     return 200;
+  }
+
+  private recordSubmitMetric(state: WriteOperationState, startedAt: number): void {
+    this.telemetry?.metric({
+      name: "graph.write.submit.latency",
+      value: this.now() - startedAt,
+      unit: "ms",
+      tags: { state },
+    });
   }
 }
 
