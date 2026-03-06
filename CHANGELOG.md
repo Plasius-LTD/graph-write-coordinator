@@ -9,6 +9,20 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 ## [Unreleased]
 
 - **Added**
+  - (placeholder)
+
+- **Changed**
+  - (placeholder)
+
+- **Fixed**
+  - (placeholder)
+
+- **Security**
+  - (placeholder)
+
+## [0.1.2] - 2026-03-06
+
+- **Added**
   - Deterministic operation transition rules enforced in coordinator lifecycle.
   - `getOperationStatus(operationId)` query contract with recommended HTTP status mapping.
   - Optional telemetry sink support for submit/process/status observability.
@@ -37,3 +51,4 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 
 
 [0.1.1]: https://github.com/Plasius-LTD/graph-write-coordinator/releases/tag/v0.1.1
+[0.1.2]: https://github.com/Plasius-LTD/graph-write-coordinator/releases/tag/v0.1.2
