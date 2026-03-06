@@ -94,7 +94,7 @@ npm run build
 
 ## Operation Status Contract
 
-- `submit` returns an operation with deterministic state progression.
+- `submit` validates command shape (`isWriteCommand`) and returns an operation with deterministic state progression.
 - `getOperationStatus(operationId)` returns:
   - `found` + `operation`,
   - `terminal` flag,

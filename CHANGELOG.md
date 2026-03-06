@@ -12,6 +12,7 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
   - Deterministic operation transition rules enforced in coordinator lifecycle.
   - `getOperationStatus(operationId)` query contract with recommended HTTP status mapping.
   - Optional telemetry sink support for submit/process/status observability.
+  - Fast-fail write command validation (`isWriteCommand`) at submit boundary.
   - High-contention batching tests for parallel hot-key submissions.
   - Telemetry emission tests for submit/degraded/process/status paths.
   - ADR-0003 documenting status contract and transition policy.

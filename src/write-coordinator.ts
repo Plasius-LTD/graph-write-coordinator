@@ -31,6 +31,54 @@ export interface SubmitWriteOptions {
   forceQueue?: boolean;
 }
 
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === "object" && !Array.isArray(value);
+
+const isSafeKey = (value: string): boolean => /^[A-Za-z0-9:_-]+$/.test(value);
+
+const isWriteCommandPayloadValid = (value: unknown): value is WriteCommand => {
+  if (!isObject(value)) {
+    return false;
+  }
+
+  if (
+    typeof value.idempotencyKey !== "string"
+    || value.idempotencyKey.length === 0
+    || value.idempotencyKey.length > 128
+    || !isSafeKey(value.idempotencyKey)
+  ) {
+    return false;
+  }
+
+  if (
+    typeof value.partitionKey !== "string"
+    || value.partitionKey.length === 0
+    || value.partitionKey.length > 128
+    || !isSafeKey(value.partitionKey)
+  ) {
+    return false;
+  }
+
+  if (
+    typeof value.aggregateKey !== "string"
+    || value.aggregateKey.length === 0
+    || value.aggregateKey.length > 256
+    || !isSafeKey(value.aggregateKey)
+  ) {
+    return false;
+  }
+
+  if (!isObject(value.payload)) {
+    return false;
+  }
+
+  if (typeof value.submittedAtEpochMs !== "number" || !Number.isFinite(value.submittedAtEpochMs) || value.submittedAtEpochMs < 0) {
+    return false;
+  }
+
+  return value.actorId === undefined || (typeof value.actorId === "string" && value.actorId.length > 0 && value.actorId.length <= 128);
+};
+
 export interface OperationStatusResponse {
   found: boolean;
   operationId: string;
@@ -68,6 +116,20 @@ export class WriteCoordinator {
   }
 
   public async submit(command: WriteCommand, options: SubmitWriteOptions = {}): Promise<WriteOperation> {
+    if (!isWriteCommandPayloadValid(command)) {
+      this.telemetry?.metric({
+        name: "graph.write.submit.invalid",
+        value: 1,
+        unit: "count",
+      });
+      this.telemetry?.error({
+        message: "Invalid write command payload",
+        source: "graph-write-coordinator",
+        code: "WRITE_COMMAND_INVALID",
+      });
+      throw new Error("Invalid write command payload");
+    }
+
     const startedAt = this.now();
     const now = this.now();
     const accepted: WriteOperation = {

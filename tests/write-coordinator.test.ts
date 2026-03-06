@@ -320,6 +320,36 @@ describe("WriteCoordinator", () => {
       expect.objectContaining({ code: "WRITE_PROCESS_FAILED" }),
     );
   });
+
+  it("fails fast on invalid write command payload", async () => {
+    const telemetry = {
+      metric: vi.fn(),
+      error: vi.fn(),
+      trace: vi.fn(),
+    };
+    const coordinator = new WriteCoordinator({
+      queue: new InMemoryQueue(),
+      operationStore: new InMemoryOperationStore(),
+      telemetry,
+    });
+
+    await expect(
+      coordinator.submit({
+        idempotencyKey: "bad key",
+        partitionKey: "pk",
+        aggregateKey: "agg",
+        payload: {},
+        submittedAtEpochMs: 1,
+      } as any),
+    ).rejects.toThrow("Invalid write command payload");
+
+    expect(telemetry.metric).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "graph.write.submit.invalid" }),
+    );
+    expect(telemetry.error).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "WRITE_COMMAND_INVALID" }),
+    );
+  });
 });
 
 describe("HotKeyBatcher", () => {
