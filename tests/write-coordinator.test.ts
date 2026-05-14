@@ -199,6 +199,126 @@ describe("WriteCoordinator", () => {
     expect(queue.nacked).toEqual([{ operationId: "op_2", reason: "commit failed" }]);
   });
 
+  it("acks and nacks dequeued queue receipts when the queue provides them", async () => {
+    let id = 0;
+    const acked: string[] = [];
+    const nacked: Array<{ operationId: string; reason: string }> = [];
+    const queue: WriteQueue = {
+      async enqueue(command) {
+        return {
+          operationId: `queued_${command.idempotencyKey}`,
+          state: "queued",
+          partitionKey: command.partitionKey,
+          aggregateKey: command.aggregateKey,
+          acceptedAtEpochMs: command.submittedAtEpochMs,
+          updatedAtEpochMs: command.submittedAtEpochMs,
+        };
+      },
+      async dequeue(): Promise<WriteCommand[]> {
+        return [
+          {
+            idempotencyKey: "ok_receipt",
+            partitionKey: "pk_receipt",
+            aggregateKey: "agg_receipt",
+            payload: { value: 1 },
+            submittedAtEpochMs: 450,
+            queueReceiptId: "receipt_ok",
+          },
+          {
+            idempotencyKey: "fail_receipt",
+            partitionKey: "pk_receipt",
+            aggregateKey: "agg_receipt",
+            payload: { value: 2 },
+            submittedAtEpochMs: 451,
+            queueReceiptId: "receipt_fail",
+          },
+        ] as unknown as WriteCommand[];
+      },
+      async ack(operationId) {
+        acked.push(operationId);
+      },
+      async nack(operationId, reason) {
+        nacked.push({ operationId, reason });
+      },
+    };
+
+    const coordinator = new WriteCoordinator({
+      queue,
+      operationStore: new InMemoryOperationStore(),
+      commitHandler: {
+        async commit(command) {
+          if (command.idempotencyKey === "fail_receipt") {
+            throw new Error("commit failed");
+          }
+          return { version: 43 };
+        },
+      },
+      idGenerator: { next: () => `op_${++id}` },
+      now: () => 450,
+    });
+
+    const operations = await coordinator.processPartition("pk_receipt", 10);
+
+    expect(operations).toHaveLength(2);
+    expect(operations[0]?.state).toBe("succeeded");
+    expect(operations[1]?.state).toBe("failed");
+    expect(acked).toEqual(["receipt_ok"]);
+    expect(nacked).toEqual([{ operationId: "receipt_fail", reason: "commit failed" }]);
+  });
+
+  it("falls back to generated operation ids when dequeue receipts are empty", async () => {
+    let id = 0;
+    const acked: string[] = [];
+    const queue: WriteQueue = {
+      async enqueue(command) {
+        return {
+          operationId: `queued_${command.idempotencyKey}`,
+          state: "queued",
+          partitionKey: command.partitionKey,
+          aggregateKey: command.aggregateKey,
+          acceptedAtEpochMs: command.submittedAtEpochMs,
+          updatedAtEpochMs: command.submittedAtEpochMs,
+        };
+      },
+      async dequeue(): Promise<WriteCommand[]> {
+        return [
+          {
+            idempotencyKey: "empty_receipt",
+            partitionKey: "pk_empty_receipt",
+            aggregateKey: "agg_empty_receipt",
+            payload: { value: 1 },
+            submittedAtEpochMs: 460,
+            queueReceiptId: "",
+          },
+        ] as unknown as WriteCommand[];
+      },
+      async ack(operationId) {
+        acked.push(operationId);
+      },
+      async nack() {
+        throw new Error("nack should not be called");
+      },
+    };
+
+    const coordinator = new WriteCoordinator({
+      queue,
+      operationStore: new InMemoryOperationStore(),
+      commitHandler: {
+        async commit() {
+          return { version: 44 };
+        },
+      },
+      idGenerator: { next: () => `op_${++id}` },
+      now: () => 460,
+    });
+
+    const operations = await coordinator.processPartition("pk_empty_receipt", 10);
+
+    expect(operations).toHaveLength(1);
+    expect(operations[0]?.state).toBe("succeeded");
+    expect(acked).toEqual(["op_1"]);
+  });
+
   it("uses default id and clock providers when omitted", async () => {
     const coordinator = new WriteCoordinator({
       queue: new InMemoryQueue(),

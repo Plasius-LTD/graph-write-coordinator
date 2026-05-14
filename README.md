@@ -120,6 +120,14 @@ npm run build
 - `graph.write.process.result`
 - `graph.write.status.lookup`
 
+## Queue Acknowledgement Semantics
+
+- When `WriteQueue.dequeue()` returns a command with `queueReceiptId`, the
+  coordinator passes that receipt back to `ack()` or `nack()`.
+- Receipt-less in-memory queues continue to work because the coordinator falls
+  back to the generated processing operation id when no dequeue receipt is
+  provided.
+
 ---
 
 ## Architecture

@@ -31,6 +31,11 @@ export interface SubmitWriteOptions {
   forceQueue?: boolean;
 }
 
+const getQueueReceiptId = (command: WriteCommand): string | null => {
+  const candidate = (command as unknown as Record<string, unknown>).queueReceiptId;
+  return typeof candidate === "string" && candidate.length > 0 ? candidate : null;
+};
+
 const isObject = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 
@@ -186,6 +191,7 @@ export class WriteCoordinator {
 
     for (const command of commands) {
       const operationId = this.idGenerator.next();
+      const queueReceiptId = getQueueReceiptId(command) ?? operationId;
       const processing: WriteOperation = {
         operationId,
         state: "processing",
@@ -203,7 +209,7 @@ export class WriteCoordinator {
           resultVersion: result.version,
         });
         await this.operationStore.update(succeeded);
-        await this.queue.ack(operationId);
+        await this.queue.ack(queueReceiptId);
         this.telemetry?.metric({
           name: "graph.write.process.result",
           value: 1,
@@ -212,11 +218,13 @@ export class WriteCoordinator {
         });
         operations.push(succeeded);
       } catch (error) {
+        const nackReason =
+          error instanceof Error ? error.message : "Unknown commit failure";
         const failed = this.transitionOperation(processing, "failed", {
-          error: error instanceof Error ? error.message : "Unknown commit failure",
+          error: nackReason,
         });
         await this.operationStore.update(failed);
-        await this.queue.nack(operationId, failed.error ?? "Unknown failure");
+        await this.queue.nack(queueReceiptId, nackReason);
         this.telemetry?.metric({
           name: "graph.write.process.result",
           value: 1,
