@@ -31,6 +31,11 @@ export interface SubmitWriteOptions {
   forceQueue?: boolean;
 }
 
+const getQueueReceiptId = (command: WriteCommand): string | null => {
+  const candidate = (command as unknown as Record<string, unknown>).queueReceiptId;
+  return typeof candidate === "string" && candidate.length > 0 ? candidate : null;
+};
+
 const isObject = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 
@@ -186,9 +191,7 @@ export class WriteCoordinator {
 
     for (const command of commands) {
       const operationId = this.idGenerator.next();
-      const queueReceiptId = typeof command.queueReceiptId === "string" && command.queueReceiptId.length > 0
-        ? command.queueReceiptId
-        : operationId;
+      const queueReceiptId = getQueueReceiptId(command) ?? operationId;
       const processing: WriteOperation = {
         operationId,
         state: "processing",

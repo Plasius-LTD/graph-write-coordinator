@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { DequeuedWriteCommand, OperationStore, WriteCommand, WriteOperation, WriteQueue } from "@plasius/graph-contracts";
+import type { OperationStore, WriteCommand, WriteOperation, WriteQueue } from "@plasius/graph-contracts";
 import { HotKeyBatcher, WriteCoordinator } from "../src/write-coordinator.js";
 
 class InMemoryOperationStore implements OperationStore {
@@ -214,7 +214,7 @@ describe("WriteCoordinator", () => {
           updatedAtEpochMs: command.submittedAtEpochMs,
         };
       },
-      async dequeue(): Promise<DequeuedWriteCommand[]> {
+      async dequeue(): Promise<WriteCommand[]> {
         return [
           {
             idempotencyKey: "ok_receipt",
@@ -232,7 +232,7 @@ describe("WriteCoordinator", () => {
             submittedAtEpochMs: 451,
             queueReceiptId: "receipt_fail",
           },
-        ];
+        ] as unknown as WriteCommand[];
       },
       async ack(operationId) {
         acked.push(operationId);
