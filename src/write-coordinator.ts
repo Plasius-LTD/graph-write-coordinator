@@ -218,11 +218,13 @@ export class WriteCoordinator {
         });
         operations.push(succeeded);
       } catch (error) {
+        const nackReason =
+          error instanceof Error ? error.message : "Unknown commit failure";
         const failed = this.transitionOperation(processing, "failed", {
-          error: error instanceof Error ? error.message : "Unknown commit failure",
+          error: nackReason,
         });
         await this.operationStore.update(failed);
-        await this.queue.nack(queueReceiptId, failed.error ?? "Unknown failure");
+        await this.queue.nack(queueReceiptId, nackReason);
         this.telemetry?.metric({
           name: "graph.write.process.result",
           value: 1,
