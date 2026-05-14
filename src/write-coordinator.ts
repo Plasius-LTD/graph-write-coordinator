@@ -186,6 +186,9 @@ export class WriteCoordinator {
 
     for (const command of commands) {
       const operationId = this.idGenerator.next();
+      const queueReceiptId = typeof command.queueReceiptId === "string" && command.queueReceiptId.length > 0
+        ? command.queueReceiptId
+        : operationId;
       const processing: WriteOperation = {
         operationId,
         state: "processing",
@@ -203,7 +206,7 @@ export class WriteCoordinator {
           resultVersion: result.version,
         });
         await this.operationStore.update(succeeded);
-        await this.queue.ack(operationId);
+        await this.queue.ack(queueReceiptId);
         this.telemetry?.metric({
           name: "graph.write.process.result",
           value: 1,
@@ -216,7 +219,7 @@ export class WriteCoordinator {
           error: error instanceof Error ? error.message : "Unknown commit failure",
         });
         await this.operationStore.update(failed);
-        await this.queue.nack(operationId, failed.error ?? "Unknown failure");
+        await this.queue.nack(queueReceiptId, failed.error ?? "Unknown failure");
         this.telemetry?.metric({
           name: "graph.write.process.result",
           value: 1,

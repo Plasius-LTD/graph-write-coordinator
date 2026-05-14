@@ -12,10 +12,10 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
   - (placeholder)
 
 - **Changed**
-  - (placeholder)
+  - `processPartition()` now prefers a dequeued queue receipt for `ack()` and `nack()` when the queue provides one.
 
 - **Fixed**
-  - (placeholder)
+  - Prevented durable queues from incorrectly acknowledging generated processing operation ids instead of dequeued queue receipts.
 
 - **Security**
   - (placeholder)

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { OperationStore, WriteCommand, WriteOperation, WriteQueue } from "@plasius/graph-contracts";
+import type { DequeuedWriteCommand, OperationStore, WriteCommand, WriteOperation, WriteQueue } from "@plasius/graph-contracts";
 import { HotKeyBatcher, WriteCoordinator } from "../src/write-coordinator.js";
 
 class InMemoryOperationStore implements OperationStore {
@@ -197,6 +197,73 @@ describe("WriteCoordinator", () => {
     expect(operations[1]?.error).toBe("commit failed");
     expect(queue.acked).toEqual(["op_1"]);
     expect(queue.nacked).toEqual([{ operationId: "op_2", reason: "commit failed" }]);
+  });
+
+  it("acks and nacks dequeued queue receipts when the queue provides them", async () => {
+    let id = 0;
+    const acked: string[] = [];
+    const nacked: Array<{ operationId: string; reason: string }> = [];
+    const queue: WriteQueue = {
+      async enqueue(command) {
+        return {
+          operationId: `queued_${command.idempotencyKey}`,
+          state: "queued",
+          partitionKey: command.partitionKey,
+          aggregateKey: command.aggregateKey,
+          acceptedAtEpochMs: command.submittedAtEpochMs,
+          updatedAtEpochMs: command.submittedAtEpochMs,
+        };
+      },
+      async dequeue(): Promise<DequeuedWriteCommand[]> {
+        return [
+          {
+            idempotencyKey: "ok_receipt",
+            partitionKey: "pk_receipt",
+            aggregateKey: "agg_receipt",
+            payload: { value: 1 },
+            submittedAtEpochMs: 450,
+            queueReceiptId: "receipt_ok",
+          },
+          {
+            idempotencyKey: "fail_receipt",
+            partitionKey: "pk_receipt",
+            aggregateKey: "agg_receipt",
+            payload: { value: 2 },
+            submittedAtEpochMs: 451,
+            queueReceiptId: "receipt_fail",
+          },
+        ];
+      },
+      async ack(operationId) {
+        acked.push(operationId);
+      },
+      async nack(operationId, reason) {
+        nacked.push({ operationId, reason });
+      },
+    };
+
+    const coordinator = new WriteCoordinator({
+      queue,
+      operationStore: new InMemoryOperationStore(),
+      commitHandler: {
+        async commit(command) {
+          if (command.idempotencyKey === "fail_receipt") {
+            throw new Error("commit failed");
+          }
+          return { version: 43 };
+        },
+      },
+      idGenerator: { next: () => `op_${++id}` },
+      now: () => 450,
+    });
+
+    const operations = await coordinator.processPartition("pk_receipt", 10);
+
+    expect(operations).toHaveLength(2);
+    expect(operations[0]?.state).toBe("succeeded");
+    expect(operations[1]?.state).toBe("failed");
+    expect(acked).toEqual(["receipt_ok"]);
+    expect(nacked).toEqual([{ operationId: "receipt_fail", reason: "commit failed" }]);
   });
 
   it("uses default id and clock providers when omitted", async () => {
