@@ -1,7 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
+import { createI18n } from "@plasius/translations";
 
 import type { OperationStore, WriteCommand, WriteOperation, WriteQueue } from "@plasius/graph-contracts";
-import { HotKeyBatcher, WriteCoordinator } from "../src/write-coordinator.js";
+import {
+  graphWriteCoordinatorEnGbTranslations,
+  graphWriteCoordinatorErrorCodes,
+  graphWriteCoordinatorErrorMessageKeysByCode,
+  graphWriteCoordinatorTranslationKeys,
+  graphWriteCoordinatorTranslations,
+  HotKeyBatcher,
+  WriteCommandValidationError,
+  WriteCoordinator,
+} from "../src/write-coordinator.js";
 
 class InMemoryOperationStore implements OperationStore {
   private readonly operations = new Map<string, WriteOperation>();
@@ -467,8 +477,69 @@ describe("WriteCoordinator", () => {
       expect.objectContaining({ name: "graph.write.submit.invalid" }),
     );
     expect(telemetry.error).toHaveBeenCalledWith(
-      expect.objectContaining({ code: "WRITE_COMMAND_INVALID" }),
+      expect.objectContaining({
+        code: graphWriteCoordinatorErrorCodes.writeCommandInvalid,
+        message: "Invalid write command payload",
+      }),
     );
+  });
+
+  it("exposes invalid write command translation metadata", async () => {
+    const coordinator = new WriteCoordinator({
+      queue: new InMemoryQueue(),
+      operationStore: new InMemoryOperationStore(),
+    });
+
+    await expect(
+      coordinator.submit({
+        idempotencyKey: "bad key",
+        partitionKey: "pk",
+        aggregateKey: "agg",
+        payload: {},
+        submittedAtEpochMs: 1,
+      } as any),
+    ).rejects.toMatchObject({
+      code: graphWriteCoordinatorErrorCodes.writeCommandInvalid,
+      messageKey:
+        graphWriteCoordinatorTranslationKeys.invalidWriteCommandPayloadMessage,
+      messageDefault: "Invalid write command payload",
+    });
+
+    await expect(
+      coordinator.submit({
+        idempotencyKey: "bad key",
+        partitionKey: "pk",
+        aggregateKey: "agg",
+        payload: {},
+        submittedAtEpochMs: 1,
+      } as any),
+    ).rejects.toBeInstanceOf(WriteCommandValidationError);
+    expect(
+      graphWriteCoordinatorErrorMessageKeysByCode[
+        graphWriteCoordinatorErrorCodes.writeCommandInvalid
+      ],
+    ).toBe(
+      graphWriteCoordinatorTranslationKeys.invalidWriteCommandPayloadMessage,
+    );
+    expect(
+      graphWriteCoordinatorEnGbTranslations[
+        graphWriteCoordinatorTranslationKeys.invalidWriteCommandPayloadMessage
+      ],
+    ).toBe("Invalid write command payload");
+  });
+
+  it("can resolve write validation messages through @plasius/translations", () => {
+    const i18n = createI18n({
+      language: "en-GB",
+      fallback: "en-GB",
+      translations: graphWriteCoordinatorTranslations,
+    });
+
+    expect(
+      i18n.t(
+        graphWriteCoordinatorTranslationKeys.invalidWriteCommandPayloadMessage,
+      ),
+    ).toBe("Invalid write command payload");
   });
 });
 
