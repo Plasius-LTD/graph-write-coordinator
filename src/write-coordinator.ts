@@ -9,6 +9,32 @@ import type {
   WriteQueue,
 } from "@plasius/graph-contracts";
 
+import {
+  getGraphWriteCoordinatorDefaultTranslation,
+  graphWriteCoordinatorEnGbTranslations,
+  graphWriteCoordinatorErrorCodes,
+  graphWriteCoordinatorErrorMessageKeysByCode,
+  graphWriteCoordinatorTranslationKeys,
+  graphWriteCoordinatorTranslations,
+} from "./i18n.js";
+import type {
+  GraphWriteCoordinatorErrorCode,
+  GraphWriteCoordinatorTranslationKey,
+} from "./i18n.js";
+
+export {
+  getGraphWriteCoordinatorDefaultTranslation,
+  graphWriteCoordinatorEnGbTranslations,
+  graphWriteCoordinatorErrorCodes,
+  graphWriteCoordinatorErrorMessageKeysByCode,
+  graphWriteCoordinatorTranslationKeys,
+  graphWriteCoordinatorTranslations,
+};
+export type {
+  GraphWriteCoordinatorErrorCode,
+  GraphWriteCoordinatorTranslationKey,
+};
+
 export interface WriteCommitResult {
   version: Version;
 }
@@ -84,6 +110,28 @@ const isWriteCommandPayloadValid = (value: unknown): value is WriteCommand => {
   return value.actorId === undefined || (typeof value.actorId === "string" && value.actorId.length > 0 && value.actorId.length <= 128);
 };
 
+/**
+ * Error thrown when a write command fails coordinator boundary validation.
+ */
+export class WriteCommandValidationError extends Error {
+  public readonly code: GraphWriteCoordinatorErrorCode;
+  public readonly messageKey: GraphWriteCoordinatorTranslationKey;
+  public readonly messageDefault: string;
+
+  public constructor() {
+    const code = graphWriteCoordinatorErrorCodes.writeCommandInvalid;
+    const messageKey = graphWriteCoordinatorErrorMessageKeysByCode[code];
+    const messageDefault =
+      getGraphWriteCoordinatorDefaultTranslation(messageKey);
+
+    super(messageDefault);
+    this.name = "WriteCommandValidationError";
+    this.code = code;
+    this.messageKey = messageKey;
+    this.messageDefault = messageDefault;
+  }
+}
+
 export interface OperationStatusResponse {
   found: boolean;
   operationId: string;
@@ -122,17 +170,18 @@ export class WriteCoordinator {
 
   public async submit(command: WriteCommand, options: SubmitWriteOptions = {}): Promise<WriteOperation> {
     if (!isWriteCommandPayloadValid(command)) {
+      const error = new WriteCommandValidationError();
       this.telemetry?.metric({
         name: "graph.write.submit.invalid",
         value: 1,
         unit: "count",
       });
       this.telemetry?.error({
-        message: "Invalid write command payload",
+        message: error.messageDefault,
         source: "graph-write-coordinator",
-        code: "WRITE_COMMAND_INVALID",
+        code: error.code,
       });
-      throw new Error("Invalid write command payload");
+      throw error;
     }
 
     const startedAt = this.now();

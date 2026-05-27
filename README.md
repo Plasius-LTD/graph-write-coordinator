@@ -95,6 +95,9 @@ npm run build
 ## Operation Status Contract
 
 - `submit` validates command shape (`isWriteCommand`) and returns an operation with deterministic state progression.
+- Invalid command payloads throw `WriteCommandValidationError`, preserving the
+  existing `Invalid write command payload` error message while adding
+  `code`, `messageKey`, and `messageDefault` for translated client display.
 - `getOperationStatus(operationId)` returns:
   - `found` + `operation`,
   - `terminal` flag,
@@ -104,6 +107,20 @@ npm run build
   - `200` for `succeeded`,
   - `409` for `failed`/`cancelled`,
   - `404` when operation is unknown.
+
+Register `graphWriteCoordinatorTranslations` with `@plasius/translations` to
+resolve package-owned validation text:
+
+```ts
+import { createI18n } from "@plasius/translations";
+import { graphWriteCoordinatorTranslations } from "@plasius/graph-write-coordinator";
+
+const i18n = createI18n({
+  language: "en-GB",
+  fallback: "en-GB",
+  translations: graphWriteCoordinatorTranslations,
+});
+```
 
 ## Hot-Key Batching
 

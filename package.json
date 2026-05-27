@@ -51,15 +51,25 @@
   "dependencies": {
     "@plasius/graph-contracts": "^0.1.4"
   },
-  "peerDependencies": {},
+  "peerDependencies": {
+    "@plasius/translations": "^1.0.17"
+  },
+  "peerDependenciesMeta": {
+    "@plasius/translations": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@plasius/translations": "^1.0.17",
     "@types/node": "^25.7.0",
+    "@types/react": "^19.2.7",
     "@typescript-eslint/eslint-plugin": "^8.59.3",
     "@typescript-eslint/parser": "^8.59.3",
     "@vitest/coverage-v8": "^4.1.6",
     "eslint": "^10.3.0",
     "globals": "^17.6.0",
+    "react": "^19.2.6",
     "rimraf": "^6.1.3",
     "tsup": "^8.5.1",
     "tsx": "^4.21.0",
