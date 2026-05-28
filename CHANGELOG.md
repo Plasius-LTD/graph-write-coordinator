@@ -16,6 +16,7 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
   - `processPartition()` now prefers a dequeued queue receipt for `ack()` and `nack()` when the queue provides one.
 
 - **Fixed**
+  - Restored the package CD workflow so protected main releases are prepared by PR and published without direct branch pushes.
   - Prevented durable queues from incorrectly acknowledging generated processing operation ids instead of dequeued queue receipts.
 
 - **Security**
