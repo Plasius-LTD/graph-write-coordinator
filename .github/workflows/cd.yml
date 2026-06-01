@@ -24,6 +24,8 @@ permissions:
   attestations: write
 
 env:
+  FALLBACK_RUNNER_LABEL: ubuntu-latest
+  SELF_HOSTED_RUNNER_LABELS: '["self-hosted","Linux","X64"]'
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 concurrency:
