@@ -9,14 +9,12 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 ## [Unreleased]
 
 - **Added**
-  - Added `en-GB` translation keys/defaults for invalid write command validation text.
+  - (placeholder)
 
 - **Changed**
-  - Invalid write command failures now expose `messageKey` and `messageDefault` on `WriteCommandValidationError`.
   - `processPartition()` now prefers a dequeued queue receipt for `ack()` and `nack()` when the queue provides one.
 
 - **Fixed**
-  - Restored the package CD workflow so protected main releases are prepared by PR and published without direct branch pushes.
   - Prevented durable queues from incorrectly acknowledging generated processing operation ids instead of dequeued queue receipts.
 
 - **Security**
