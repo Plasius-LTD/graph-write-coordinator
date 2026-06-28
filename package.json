@@ -49,7 +49,7 @@
   },
   "homepage": "https://github.com/Plasius-LTD/graph-write-coordinator#readme",
   "dependencies": {
-    "@plasius/graph-contracts": "^0.1.4"
+    "@plasius/graph-contracts": "^0.1.8"
   },
   "peerDependencies": {
     "@plasius/translations": "^1.0.17"
