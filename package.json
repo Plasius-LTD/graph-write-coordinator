@@ -52,7 +52,7 @@
     "@plasius/graph-contracts": "^0.1.8"
   },
   "peerDependencies": {
-    "@plasius/translations": "^1.0.17"
+    "@plasius/translations": "^1.0.23"
   },
   "peerDependenciesMeta": {
     "@plasius/translations": {
@@ -61,7 +61,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@plasius/translations": "^1.0.17",
+    "@plasius/translations": "^1.0.23",
     "@types/node": "^25.7.0",
     "@types/react": "^19.2.7",
     "@typescript-eslint/eslint-plugin": "^8.59.3",
