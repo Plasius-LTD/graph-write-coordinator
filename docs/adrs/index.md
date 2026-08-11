@@ -4,3 +4,4 @@
 - [ADR-0002: Dual ESM and CJS Distribution](./adr-0002-dual-esm-cjs-distribution.md)
 - [ADR-0003: Operation Status Contract and Transition Rules](./adr-0003-status-contract-and-transition-rules.md)
 - [ADR-0004: Write Coordinator Telemetry Baseline](./adr-0004-write-telemetry-baseline.md)
+- [ADR-0005: Hosted OIDC Package Publication](./adr-0005-hosted-oidc-package-publication.md)
