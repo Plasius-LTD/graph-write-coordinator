@@ -5,3 +5,4 @@
 - [ADR-0003: Operation Status Contract and Transition Rules](./adr-0003-status-contract-and-transition-rules.md)
 - [ADR-0004: Write Coordinator Telemetry Baseline](./adr-0004-write-telemetry-baseline.md)
 - [ADR-0005: Hosted OIDC Package Publication](./adr-0005-hosted-oidc-package-publication.md)
+- [ADR-0006: Quarantined Push-Only Self-Hosted CI](./adr-0006-quarantined-push-ci.md)

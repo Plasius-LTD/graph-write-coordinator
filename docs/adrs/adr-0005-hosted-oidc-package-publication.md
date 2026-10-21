@@ -16,7 +16,8 @@ Publish only from the GitHub-hosted `production` job using npm trusted
 publishing. Prove the prepared SHA is still the exact remote `main` head and
 that push-triggered `ci.yml` succeeded for it. Require Node 24 and npm 11.5.1 or
 newer, request provenance, and prohibit npm write-token fallbacks. Reviewed CI
-uses explicit GitHub-hosted runners; fork PR code is denied.
+uses the explicit quarantined self-hosted group for trusted repository pushes
+(see ADR-0006); fork and PR events cannot schedule CI jobs.
 
 ## Consequences
 
