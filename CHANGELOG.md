@@ -8,6 +8,20 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+- **Added**
+  - (placeholder)
+
+- **Changed**
+  - (placeholder)
+
+- **Fixed**
+  - (placeholder)
+
+- **Security**
+  - (placeholder)
+
+## [0.1.18] - 2026-10-21
+
 - Restore trusted push-only CI on the explicit quarantined self-hosted runner group, retain clean installs and final artifact/coverage gates, and document release and rollback controls.
 
 - **Added**
@@ -271,3 +285,4 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 [0.1.15]: https://github.com/Plasius-LTD/graph-write-coordinator/releases/tag/v0.1.15
 [0.1.16]: https://github.com/Plasius-LTD/graph-write-coordinator/releases/tag/v0.1.16
 [0.1.17]: https://github.com/Plasius-LTD/graph-write-coordinator/releases/tag/v0.1.17
+[0.1.18]: https://github.com/Plasius-LTD/graph-write-coordinator/releases/tag/v0.1.18
